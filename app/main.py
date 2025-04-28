@@ -1,16 +1,21 @@
+import streamlit as st
 import tensorflow as tf
+import numpy as np
 import cv2
 import requests
-import numpy as np
+from PIL import Image
 
-# Your Groq API Key (for text-based chatbot)
-GROQ_API_KEY = "GROQ_API_KEY"
+# Setup page
+st.set_page_config(page_title="PlantEase - Plant Doctor", page_icon="🌱", layout="centered")
+
+# Groq API
+GROQ_API_KEY = "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"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+# Load your model
+model = tf.keras.models.load_model(r'C:\Users\Manthan Bhambhani\Desktop\AI Project\model\plant_disease_detection.h5')
 
-model = tf.keras.models.load_model('..\model\plant_disease_detection.h5')
-
-# Define the class names based on your model
+# Class labels
 class_names = ['Apple___Apple_scab',
                'Apple___Black_rot',
                'Apple___Cedar_apple_rust',
@@ -51,91 +56,120 @@ class_names = ['Apple___Apple_scab',
                'Tomato___healthy']
 
 
-def predict_disease(img_path):
-    # Read the image using OpenCV
-    img = cv2.imread(img_path)
-    
-    if img is None:
-        print("Error: Image not found or cannot be read.")
-        return
-    
-    # Convert the image from BGR to RGB format
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    
-    # Resize the image to the required size (224x224)
-    img_resized = cv2.resize(img_rgb, (224, 224))
-    
-    # Normalize the image (rescale pixel values to [0, 1])
+# Predict disease function
+def predict_disease(image):
+    img = np.array(image)
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    img_resized = cv2.resize(img, (224, 224))
     img_normalized = img_resized / 255.0
-    
-    # Convert the image to a batch format
-    input_arr = np.array([img_normalized])
-    
-    # Perform prediction
+    input_arr = np.expand_dims(img_normalized, axis=0)
     prediction = model.predict(input_arr)
-    
-    # Get the index of the highest probability class
     result_index = np.argmax(prediction)
-    
-    # Retrieve the class name corresponding to the highest probability
     model_prediction = class_names[result_index]
-    
-    return model_prediction
+    disease_name = model_prediction.split("__")
+    plant = disease_name[0].replace("_","")
+    condition = disease_name[1].replace("_"," ")
+    disease = plant + " - " + condition
+    return disease
 
-# Function to interact with Groq API (Chatbot)
+# Groq chat function
 def chat_with_groq(user_input):
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
-    
     payload = {
         "model": "llama3-8b-8192",
         "messages": [
-            {"role": "system", "content": "You are an expert botanist and plant care advisor. Answer questions only about plants, gardening, diseases, soil, fertilizers, sunlight, watering, and pest control."},
+            {"role": "system", "content": "You are an expert botanist and plant care advisor."},
             {"role": "user", "content": user_input}
         ]
     }
-    
     response = requests.post(GROQ_API_URL, headers=headers, json=payload)
-    
     if response.status_code == 200:
         return response.json()['choices'][0]['message']['content']
     else:
         return f"⚠️ API Error: {response.status_code}"
 
+# Initialize session states
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-# Main chatbot flow
-def main():
-    print("\n🌱 Welcome to PlantEase 2.0 Chatbot! 🌱")
-    print("Type 'text' for asking a question, 'image' for disease detection, or 'exit' to quit.\n")
+if "user_input" not in st.session_state:
+    st.session_state.user_input = ""
 
-    while True:
-        mode = input("Choose mode (text/image/exit): ").strip().lower()
-        
-        if mode == "exit":
-            print("👋 Goodbye! Stay green! 🌻")
-            break
+if "uploaded_file" not in st.session_state:
+    st.session_state.uploaded_file = None
 
-        elif mode == "text":
-            user_input = input("👤 You: ")
-            if user_input.lower() in ['exit', 'quit']:
-                print("👋 Goodbye! Stay green! 🌻")
-                break
+# Display title
+st.title("🌱 PlantEase")
 
-            # Call Groq API for plant-related queries
-            response = chat_with_groq(user_input)
-            print(f"🤖 PlantEase: {response}\n")
+# Display chat history
+for role, content in st.session_state.chat_history:
+    if role == "user":
+        st.chat_message("user").markdown(content)
+    elif role == "user_image":
+        st.chat_message("user").image(content)
+    else:
+        st.chat_message("assistant").markdown(content)
 
-        elif mode == "image":
-            img_path = input("🖼️ Enter the full path to the plant leaf image: ").strip()
-            disease = predict_disease(img_path)
-            print(f"🌿 Plant Disease Prediction: {disease}\n")
+# Chat input + Upload button together
+with st.container():
+    col1, col2, col3 = st.columns([7, 1, 1])
+    
+    with col1:
+        st.session_state.user_input = st.text_input("Type here...", value=st.session_state.user_input, key="input", label_visibility="collapsed")
+    
+    with col2:
+        upload_clicked = st.button("📷", use_container_width=True)
+    
+    with col3:
+        send_clicked = st.button("➤", use_container_width=True)
 
-        else:
-            print("⚠️ Invalid choice. Please type 'text', 'image', or 'exit'.\n")
+# Handle Upload button
+if upload_clicked:
+    st.session_state.uploading = True  # Set a session flag
+
+# If uploading is in progress
+if st.session_state.get("uploading", False):
+    uploaded_file = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"], key="upload", label_visibility="hidden")
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.session_state.chat_history.append(("user_image", image))  # User image
+        disease_detected = predict_disease(image)
+        st.session_state.disease_detected = disease_detected  # <-- Save disease into session state
+        response = f"🩺 I analyzed the image and detected **{disease_detected}**.\n\n**What would you like to know more about it?**"
+        st.session_state.chat_history.append(("bot", response))
+        st.session_state.uploading = False  # Reset uploading
+        st.rerun()
+
+# Show Suggested questions if disease was detected
+if "disease_detected" in st.session_state:
+    disease_detected = st.session_state.disease_detected
+    check = disease_detected.split(" ")
+    if check[-1] != "healthy":
+        suggestions = [
+            f"What are the symptoms of {disease_detected}?",
+            f"How can I treat {disease_detected} naturally?",
+            f"How to prevent {disease_detected} from spreading?",
+            f"Recommended fertilizers or fungicides for {disease_detected}?"
+        ]
+        for sugg in suggestions:
+            if st.button(sugg):
+                st.session_state.chat_history.append(("user", sugg))
+                bot_reply = chat_with_groq(sugg)
+                st.session_state.chat_history.append(("bot", bot_reply))
+                st.session_state.user_input = ""
+                del st.session_state.disease_detected  # After handling, remove it
+                st.rerun()
 
 
-# Run the chatbot
-if __name__ == "__main__":
-    main()
+# Handle Send button or ENTER key
+if send_clicked or (st.session_state.user_input and st.session_state.user_input.endswith("\n")):
+    user_query = st.session_state.user_input.strip()
+    if user_query:
+        st.session_state.chat_history.append(("user", user_query))
+        bot_response = chat_with_groq(user_query)
+        st.session_state.chat_history.append(("bot", bot_response))
+        st.session_state.user_input = ""
+        st.rerun()
