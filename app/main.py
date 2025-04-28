@@ -8,7 +8,7 @@ GROQ_API_KEY = "GROQ_API_KEY"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
-model = tf.keras.models.load_model('..\Python310model\plant_disease_detection.h5')
+model = tf.keras.models.load_model('..\model\plant_disease_detection.h5')
 
 # Define the class names based on your model
 class_names = ['Apple___Apple_scab',
