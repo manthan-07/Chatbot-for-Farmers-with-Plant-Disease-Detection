@@ -6,10 +6,10 @@ import requests
 from PIL import Image
 
 # Setup page
-st.set_page_config(page_title="PlantEase - Plant Doctor", page_icon="🌱", layout="centered")
+st.set_page_config(page_title="AgroHealth - Plant Doctor", page_icon="🌱", layout="centered")
 
 # Groq API
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "your_groq_api_key"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Load your model
@@ -101,8 +101,11 @@ if "user_input" not in st.session_state:
 if "uploaded_file" not in st.session_state:
     st.session_state.uploaded_file = None
 
+if "clear_input" not in st.session_state:
+    st.session_state.clear_input = False
+
 # Display title
-st.title("🌱 PlantEase")
+st.title("🌱 AgroHealth")
 
 # Display chat history
 for role, content in st.session_state.chat_history:
@@ -113,12 +116,13 @@ for role, content in st.session_state.chat_history:
     else:
         st.chat_message("assistant").markdown(content)
 
+    
 # Chat input + Upload button together
 with st.container():
     col1, col2, col3 = st.columns([7, 1, 1])
     
     with col1:
-        st.session_state.user_input = st.text_input("Type here...", value=st.session_state.user_input, key="input", label_visibility="collapsed")
+        st.session_state.user_input = st.text_input("Type here...", value="" if st.session_state.clear_input else st.session_state.user_input, key="input", label_visibility="collapsed", placeholder="Type your question...")
     
     with col2:
         upload_clicked = st.button("📷", use_container_width=True)
@@ -165,11 +169,11 @@ if "disease_detected" in st.session_state:
 
 
 # Handle Send button or ENTER key
-if send_clicked or (st.session_state.user_input and st.session_state.user_input.endswith("\n")):
+if send_clicked:
     user_query = st.session_state.user_input.strip()
     if user_query:
         st.session_state.chat_history.append(("user", user_query))
         bot_response = chat_with_groq(user_query)
         st.session_state.chat_history.append(("bot", bot_response))
-        st.session_state.user_input = ""
+        st.session_state.clear_input = True
         st.rerun()
